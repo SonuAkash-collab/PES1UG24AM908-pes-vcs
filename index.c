@@ -247,7 +247,11 @@ int index_save(const Index *index) {
 
     int dir_fd = open(PES_DIR, O_RDONLY);
     if (dir_fd >= 0) {
-        fsync(dir_fd);
+        if (fsync(dir_fd) != 0) {
+            close(dir_fd);
+            unlink(temp_path);
+            return -1;
+        }
         close(dir_fd);
     }
 
