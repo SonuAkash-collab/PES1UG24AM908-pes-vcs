@@ -12,7 +12,7 @@
 
 **SRN:** PES1UG24AM908
 
-### Lab Report
+### Submission Report
 
 - [report.pdf](report.pdf)
 
