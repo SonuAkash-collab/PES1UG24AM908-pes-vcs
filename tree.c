@@ -169,6 +169,18 @@ static int tree_entry_exists(const Tree *tree, const char *name) {
     return 0;
 }
 
+static int tree_append_entry(Tree *tree, const char *name, uint32_t mode, const ObjectID *hash) {
+    if (tree->count >= MAX_TREE_ENTRIES) {
+        return -1;
+    }
+
+    TreeEntry *entry = &tree->entries[tree->count++];
+    entry->mode = mode;
+    entry->hash = *hash;
+    snprintf(entry->name, sizeof(entry->name), "%s", name);
+    return 0;
+}
+
 static int tree_from_index_entries(const Index *index, const char *prefix, ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
@@ -187,14 +199,9 @@ static int tree_from_index_entries(const Index *index, const char *prefix, Objec
 
         const char *slash = strchr(rel, '/');
         if (!slash) {
-            if (tree.count >= MAX_TREE_ENTRIES) {
+            if (tree_append_entry(&tree, rel, src->mode, &src->hash) != 0) {
                 return -1;
             }
-
-            TreeEntry *entry = &tree.entries[tree.count++];
-            entry->mode = src->mode;
-            entry->hash = src->hash;
-            snprintf(entry->name, sizeof(entry->name), "%s", rel);
             continue;
         }
 
@@ -222,14 +229,9 @@ static int tree_from_index_entries(const Index *index, const char *prefix, Objec
             return -1;
         }
 
-        if (tree.count >= MAX_TREE_ENTRIES) {
+        if (tree_append_entry(&tree, dir_name, MODE_DIR, &child_id) != 0) {
             return -1;
         }
-
-        TreeEntry *entry = &tree.entries[tree.count++];
-        entry->mode = MODE_DIR;
-        entry->hash = child_id;
-        snprintf(entry->name, sizeof(entry->name), "%s", dir_name);
     }
 
     void *data = NULL;
