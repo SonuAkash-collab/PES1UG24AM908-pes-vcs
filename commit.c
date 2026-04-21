@@ -249,12 +249,20 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     memset(&commit, 0, sizeof(commit));
     commit.tree = tree_id;
     commit.timestamp = (uint64_t)time(NULL);
-    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
-    snprintf(commit.message, sizeof(commit.message), "%s", message);
+    int author_len = snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    int message_len = snprintf(commit.message, sizeof(commit.message), "%s", message);
+    if (author_len < 0 || author_len >= (int)sizeof(commit.author)) {
+        return -1;
+    }
+    if (message_len < 0 || message_len >= (int)sizeof(commit.message)) {
+        return -1;
+    }
 
     ObjectID parent_id;
     if (head_read(&parent_id) == 0) {
-        if (memcmp(parent_id.hash, (uint8_t[HASH_SIZE]){0}, HASH_SIZE) != 0) {
+        ObjectID zero_id;
+        memset(&zero_id, 0, sizeof(zero_id));
+        if (memcmp(&parent_id, &zero_id, sizeof(ObjectID)) != 0) {
             commit.has_parent = 1;
             commit.parent = parent_id;
         } else {
