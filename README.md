@@ -8,6 +8,10 @@
 
 ## Submission Pack
 
+**Name:** Sonu Akash Soundararajan
+
+**SRN:** PES1UG24AM908
+
 ### Lab Report
 
 - [report.pdf](report.pdf)
