@@ -24,6 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 // Forward declarations (implemented in object.c)
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
@@ -138,7 +139,10 @@ int head_read(ObjectID *id_out) {
     if (strncmp(line, "ref: ", 5) == 0) {
         snprintf(ref_path, sizeof(ref_path), "%s/%s", PES_DIR, line + 5);
         f = fopen(ref_path, "r");
-        if (!f) return -1; // Branch exists but has no commits yet
+        if (!f) {
+            memset(id_out->hash, 0, HASH_SIZE);
+            return 0; // First commit on this branch
+        }
         if (!fgets(line, sizeof(line), f)) { fclose(f); return -1; }
         fclose(f);
         line[strcspn(line, "\r\n")] = '\0';
@@ -164,19 +168,54 @@ int head_update(const ObjectID *new_commit) {
 
     char tmp_path[528];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", target_path);
-    
+
     f = fopen(tmp_path, "w");
     if (!f) return -1;
     
     char hex[HASH_HEX_SIZE + 1];
     hash_to_hex(new_commit, hex);
-    fprintf(f, "%s\n", hex);
-    
-    fflush(f);
-    fsync(fileno(f));
-    fclose(f);
-    
-    return rename(tmp_path, target_path);
+
+    if (fprintf(f, "%s\n", hex) < 0) {
+        fclose(f);
+        unlink(tmp_path);
+        return -1;
+    }
+
+    if (fflush(f) != 0) {
+        fclose(f);
+        unlink(tmp_path);
+        return -1;
+    }
+
+    int fd = fileno(f);
+    if (fd < 0 || fsync(fd) != 0) {
+        fclose(f);
+        unlink(tmp_path);
+        return -1;
+    }
+
+    if (fclose(f) != 0) {
+        unlink(tmp_path);
+        return -1;
+    }
+
+    if (rename(tmp_path, target_path) != 0) {
+        unlink(tmp_path);
+        return -1;
+    }
+
+    char dir_path[520];
+    snprintf(dir_path, sizeof(dir_path), "%s", PES_DIR);
+    fd = open(dir_path, O_RDONLY);
+    if (fd >= 0) {
+        if (fsync(fd) != 0) {
+            close(fd);
+            return -1;
+        }
+        close(fd);
+    }
+
+    return 0;
 }
 
 // ─── TODO: Implement these ───────────────────────────────────────────────────
@@ -194,8 +233,45 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+    ObjectID tree_id;
+    if (tree_from_index(&tree_id) != 0) {
+        return -1;
+    }
+
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+    commit.tree = tree_id;
+    commit.timestamp = (uint64_t)time(NULL);
+    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    snprintf(commit.message, sizeof(commit.message), "%s", message);
+
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        if (memcmp(parent_id.hash, (uint8_t[HASH_SIZE]){0}, HASH_SIZE) != 0) {
+            commit.has_parent = 1;
+            commit.parent = parent_id;
+        } else {
+            commit.has_parent = 0;
+        }
+    } else {
+        commit.has_parent = 0;
+    }
+
+    void *data = NULL;
+    size_t len = 0;
+    if (commit_serialize(&commit, &data, &len) != 0) {
+        return -1;
+    }
+
+    int rc = object_write(OBJ_COMMIT, data, len, commit_id_out);
+    free(data);
+    if (rc != 0) {
+        return -1;
+    }
+
+    if (head_update(commit_id_out) != 0) {
+        return -1;
+    }
+
+    return 0;
 }
