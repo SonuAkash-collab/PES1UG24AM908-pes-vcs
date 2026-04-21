@@ -264,6 +264,11 @@ int index_save(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
+    IndexEntry *entry = index_find(index, path);
+    if (!entry && index->count >= MAX_INDEX_ENTRIES) {
+        return -1;
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         return -1;
@@ -306,7 +311,6 @@ int index_add(Index *index, const char *path) {
         return -1;
     }
 
-    IndexEntry *entry = index_find(index, path);
     if (!entry) {
         if (index->count >= MAX_INDEX_ENTRIES) {
             return -1;
