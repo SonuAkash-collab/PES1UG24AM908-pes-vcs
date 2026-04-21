@@ -6,6 +6,61 @@
 
 ---
 
+## Submission Pack
+
+### Screenshots
+
+**Phase 1**
+
+- 1A: ![Phase 1A](Screenshots/1A.jpeg)
+- 1B: ![Phase 1B](Screenshots/1B.jpeg)
+
+**Phase 2**
+
+- 2A: ![Phase 2A](Screenshots/2A.jpeg)
+- 2B: ![Phase 2B](Screenshots/2B.jpeg)
+
+**Phase 3**
+
+- 3A: ![Phase 3A](Screenshots/3A.jpeg)
+- 3B: ![Phase 3B](Screenshots/3B.jpeg)
+
+**Phase 4**
+
+- 4A-1: ![Phase 4A-1](Screenshots/4A1.jpeg)
+- 4A-2: ![Phase 4A-2](Screenshots/4A2.jpeg)
+- 4B: ![Phase 4B](Screenshots/4B.jpeg)
+- 4C: ![Phase 4C](Screenshots/4C.jpeg)
+
+**Final**
+
+- Final-1: ![Final 1](Screenshots/Final1.jpeg)
+- Final-2: ![Final 2](Screenshots/Final2.jpeg)
+
+### Analysis Answers
+
+**Q5.1**
+
+To implement `pes checkout <branch>`, update `.pes/HEAD` to point to `ref: refs/heads/<branch>`, read the branch tip from `.pes/refs/heads/<branch>`, then rewrite the working directory to match that commit's tree. That means creating files that exist in the target tree, removing files that do not, and restoring file modes as needed. The hard part is safely deleting or replacing files that differ between branches while keeping the index consistent afterward.
+
+**Q5.2**
+
+To detect a dirty working directory conflict, compare the working file against the index and compare the index against the branch tree. If a file that checkout would overwrite has a blob hash mismatch versus the index, or its staged hash differs from the current branch tree, checkout should abort. The index and object store are enough to determine whether the user has unstaged or staged changes that would be lost.
+
+**Q5.3**
+
+In detached HEAD, `HEAD` stores a commit hash directly instead of a branch ref. Commits still work, but the new commits are not moved into any branch, so they can become unreachable when you leave that state. Recovery is usually done by creating a branch at the saved hash or by using reflog in Git; in PES-VCS, recovery would require finding the commit hash again from the object store because there is no reflog.
+
+**Q6.1**
+
+Garbage collection should start from every branch tip in `.pes/refs/heads/`, walk parent commits, then recursively walk each commit's tree and its blobs/subtrees. All reachable hashes go into a hash set, and then every file under `.pes/objects/` is deleted if it is not in that set. A hash set is the best data structure because membership checks are constant time. With 100,000 commits and 50 branches, the number of unique visited objects depends on how much history is shared, but the traversal still scales with the total reachable commit-tree-blob graph rather than branch count alone.
+
+**Q6.2**
+
+GC is dangerous during a concurrent commit because the commit process may have written new objects but not yet updated the branch ref. If GC runs in that gap, it will not see the new objects as reachable and could delete them, leaving the commit pointing at missing data. Real Git avoids this with locking, conservative pruning, and grace periods for recent objects so in-flight work is not collected prematurely.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -603,86 +658,3 @@ The following questions cover filesystem concepts beyond the implementation scop
 
 ---
 
-## Submission Screenshots
-
-### Phase 1
-
-**1A — `./test_objects` output**
-
-![Phase 1A](Screenshots/1A.jpeg)
-
-**1B — `find .pes/objects -type f` output**
-
-![Phase 1B](Screenshots/1B.jpeg)
-
-### Phase 2
-
-**2A — `./test_tree` output**
-
-![Phase 2A](Screenshots/2A.jpeg)
-
-**2B — raw tree object dump with `xxd`**
-
-The uploaded `Screenshots/` folder does not contain a `2B.jpeg` file, so this item is left as a text note only. If you capture the raw tree dump later, add it here as `Screenshots/2B.jpeg`.
-
-### Phase 3
-
-**3A — `pes init`, `pes add`, `pes status` output**
-
-![Phase 3A](Screenshots/3A.jpeg)
-
-**3B — `.pes/index` contents**
-
-![Phase 3B](Screenshots/3B.jpeg)
-
-### Phase 4
-
-**4A-1 — `pes log` output, part 1**
-
-![Phase 4A part 1](Screenshots/4A1.jpeg)
-
-**4A-2 — `pes log` output, part 2**
-
-![Phase 4A part 2](Screenshots/4A2.jpeg)
-
-**4B — object store growth after three commits**
-
-![Phase 4B](Screenshots/4B.jpeg)
-
-**4C — `.pes/refs/heads/main` and `.pes/HEAD`**
-
-![Phase 4C](Screenshots/4C.jpeg)
-
-### Final Integration Test
-
-**Final-1 — integration test output, part 1**
-
-![Final integration part 1](Screenshots/Final1.jpeg)
-
-**Final-2 — integration test output, part 2**
-
-![Final integration part 2](Screenshots/Final2.jpeg)
-
----
-
-## Analysis Answers
-
-### Q5.1 — Implementing `pes checkout <branch>`
-
-To switch branches, three things must change in `.pes/`: `HEAD` must be updated to `ref: refs/heads/<branch>`, and the working directory files must be updated to match the target branch's tree. The process is: read the target branch's commit hash from `.pes/refs/heads/<branch>`, walk the commit's tree object recursively, then for each file in the tree write the blob contents to the working directory, removing files that don't exist in the target tree. The complexity comes from handling files that exist in the current branch but not the target — those must be deleted. You also need to update the index to match the new tree so `status` works correctly after checkout.
-
-### Q5.2 — Detecting dirty working directory conflicts
-
-For each file that differs between the two branches' trees, check two things: first, compare the file's current blob hash (by reading and hashing it) against the index entry's stored hash — if they differ, the file has unstaged changes. Second, compare the index entry's hash against the current branch's tree hash for that file — if they differ, the file has staged but uncommitted changes. If either condition is true for any file that would be overwritten by checkout, abort with an error. This requires no extra data structures — just the index and the object store.
-
-### Q5.3 — Detached HEAD and recovery
-
-In detached HEAD state, `HEAD` contains a raw commit hash instead of `ref: refs/heads/main`. New commits are created normally and the `HEAD` hash is updated, but no branch pointer moves. If you switch branches or close the repo, those commits become unreachable — no branch points to them. Recovery: if you remember the hash (it was printed on commit), run `git branch recover-branch <hash>` to create a branch pointing to it. If you don't remember it, Git's reflog tracks recent HEAD values, so `git reflog` shows the lost commits. PES-VCS has no reflog, so recovery would require scanning all objects in `.pes/objects/` to find commit objects and reconstruct the chain.
-
-### Q6.1 — Garbage collection algorithm
-
-Start from all branch refs in `.pes/refs/heads/`. For each ref, walk the commit chain following parent pointers. For each commit, add its tree hash to a reachable set, then recursively walk the tree adding all blob and subtree hashes. Any object file in `.pes/objects/` whose hash is not in the reachable set is unreachable and can be deleted. Use a `HashSet` for the reachable set — O(1) lookup. For a repository with 100,000 commits and 50 branches, assuming an average of 20 objects per commit (blobs + trees), you'd visit roughly 2,000,000 objects in the worst case, but with deduplication the actual unique objects visited would be far less since unchanged files share blobs across commits.
-
-### Q6.2 — GC race condition
-
-The race: a commit operation calls `tree_from_index()` which writes new blob objects to the object store, but hasn't yet called `head_update()` to publish the commit. At this exact moment, GC runs, scans all reachable objects starting from branch refs, doesn't find the new blobs (no commit points to them yet), and deletes them. When the commit operation then writes the commit object and updates HEAD, it points to a tree that references now-deleted blobs — the repository is corrupted. Git avoids this by using a grace period: objects newer than 2 weeks are never deleted regardless of reachability, giving any in-progress operation time to complete. It also checks for in-progress operations before running GC.
