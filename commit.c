@@ -30,6 +30,12 @@
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out);
 
+static int object_id_is_zero(const ObjectID *id) {
+    ObjectID zero_id;
+    memset(&zero_id, 0, sizeof(zero_id));
+    return memcmp(id, &zero_id, sizeof(ObjectID)) == 0;
+}
+
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
 // Parse raw commit data into a Commit struct.
@@ -146,7 +152,7 @@ int head_read(ObjectID *id_out) {
         snprintf(ref_path, sizeof(ref_path), "%s/%s", PES_DIR, line + 5);
         f = fopen(ref_path, "r");
         if (!f) {
-            memset(id_out->hash, 0, HASH_SIZE);
+            memset(id_out, 0, sizeof(*id_out));
             return 0; // First commit on this branch
         }
         if (!fgets(line, sizeof(line), f)) { fclose(f); return -1; }
@@ -266,9 +272,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
 
     ObjectID parent_id;
     if (head_read(&parent_id) == 0) {
-        ObjectID zero_id;
-        memset(&zero_id, 0, sizeof(zero_id));
-        if (memcmp(&parent_id, &zero_id, sizeof(ObjectID)) != 0) {
+        if (!object_id_is_zero(&parent_id)) {
             commit.has_parent = 1;
             commit.parent = parent_id;
         } else {
