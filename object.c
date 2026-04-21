@@ -109,27 +109,26 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 
     // Build header: "<type> <size>\0"
     char header_buf[64];
-    int header_len = snprintf(header_buf, sizeof(header_buf), "%s %zu", type_str, len);
-    if (header_len < 0 || header_len >= (int)sizeof(header_buf)) {
+    int hdr_len = snprintf(header_buf, sizeof(header_buf), "%s %zu", type_str, len);
+    if (hdr_len < 0 || hdr_len >= (int)sizeof(header_buf)) {
         return -1;
     }
-    header_len++; // Include the null byte in the header
+    hdr_len++; // Include the null byte in the header
 
     // Step 2: Concatenate header + data into one buffer
-    size_t full_len = header_len + len;
+    size_t full_len = hdr_len + len;
     void *full_obj = malloc(full_len);
     if (!full_obj) return -1;
 
-    memcpy(full_obj, header_buf, header_len);
-    memcpy((char *)full_obj + header_len, data, len);
+    memcpy(full_obj, header_buf, hdr_len);
+    memcpy((char *)full_obj + hdr_len, data, len);
 
     // Step 3: Compute SHA-256 hash of the full object
     compute_hash(full_obj, full_len, id_out);
 
-    free(full_obj);
-
     // Step 4: Check for deduplication (object already exists)
     if (object_exists(id_out)) {
+        free(full_obj);
         return 0; // Already stored, nothing to do
     }
 
@@ -142,10 +141,60 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     if (mkdir(shard_dir, 0755) < 0) {
         // EEXIST is fine (directory already exists)
         if (errno != EEXIST) {
+            free(full_obj);
             return -1;
         }
     }
 
+    // Step 6: Write atomically to a temp file, then rename
+    char temp_path[512], final_path[512];
+    object_path(id_out, final_path, sizeof(final_path));
+    snprintf(temp_path, sizeof(temp_path), "%s.tmp", final_path);
+
+    // Write full object to temp file
+    int fd = open(temp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    ssize_t written = write(fd, full_obj, full_len);
+    if (written < 0 || (size_t)written != full_len) {
+        close(fd);
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    // Step 7: fsync to ensure data hits disk
+    if (fsync(fd) < 0) {
+        close(fd);
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    if (close(fd) < 0) {
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    // Step 8: Atomic rename
+    if (rename(temp_path, final_path) < 0) {
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    // Step 9: fsync the shard directory to persist the rename
+    fd = open(shard_dir, O_RDONLY);
+    if (fd >= 0) {
+        fsync(fd);
+        close(fd);
+    }
+
+    free(full_obj);
     return 0;
 }
 
