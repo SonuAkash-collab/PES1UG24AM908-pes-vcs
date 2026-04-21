@@ -177,7 +177,10 @@ static int tree_append_entry(Tree *tree, const char *name, uint32_t mode, const 
     TreeEntry *entry = &tree->entries[tree->count++];
     entry->mode = mode;
     entry->hash = *hash;
-    snprintf(entry->name, sizeof(entry->name), "%s", name);
+    int written = snprintf(entry->name, sizeof(entry->name), "%s", name);
+    if (written < 0 || written >= (int)sizeof(entry->name)) {
+        return -1;
+    }
     return 0;
 }
 
