@@ -8,6 +8,10 @@
 
 ## Submission Pack
 
+### Lab Report
+
+- [report.pdf](report.pdf)
+
 ### Screenshots
 
 **Phase 1**
