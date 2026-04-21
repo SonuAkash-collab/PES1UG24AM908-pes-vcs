@@ -71,9 +71,31 @@ void cmd_commit(int argc, char *argv[]) {
         return;
     }
 
-    const char *message = argv[3];
+    size_t message_len = 0;
+    for (int i = 3; i < argc; i++) {
+        message_len += strlen(argv[i]);
+        if (i + 1 < argc) {
+            message_len++;
+        }
+    }
+
+    char *message = malloc(message_len + 1);
+    if (!message) {
+        fprintf(stderr, "error: commit failed\n");
+        return;
+    }
+
+    message[0] = '\0';
+    for (int i = 3; i < argc; i++) {
+        strcat(message, argv[i]);
+        if (i + 1 < argc) {
+            strcat(message, " ");
+        }
+    }
+
     ObjectID commit_id;
     if (commit_create(message, &commit_id) != 0) {
+        free(message);
         fprintf(stderr, "error: commit failed\n");
         return;
     }
@@ -81,6 +103,7 @@ void cmd_commit(int argc, char *argv[]) {
     char hex[HASH_HEX_SIZE + 1];
     hash_to_hex(&commit_id, hex);
     printf("Committed: %.12s... %s\n", hex, message);
+    free(message);
 }
 
 // Callback for commit_walk used by cmd_log.
