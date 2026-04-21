@@ -147,7 +147,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     }
 
     // Step 6: Write atomically to a temp file, then rename
-    char temp_path[512], final_path[512];
+    char temp_path[516], final_path[512];
     object_path(id_out, final_path, sizeof(final_path));
     snprintf(temp_path, sizeof(temp_path), "%s.tmp", final_path);
 
@@ -268,17 +268,12 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     size_t header_len = (char *)null_pos - (char *)file_data;
     char *header = (char *)file_data;
 
-    // Parse type string from header
-    const char *type_str = NULL;
     ObjectType type_val;
     if (strncmp(header, "blob", 4) == 0 && (header[4] == ' ' || header[4] == '\0')) {
-        type_str = "blob";
         type_val = OBJ_BLOB;
     } else if (strncmp(header, "tree", 4) == 0 && (header[4] == ' ' || header[4] == '\0')) {
-        type_str = "tree";
         type_val = OBJ_TREE;
     } else if (strncmp(header, "commit", 6) == 0 && (header[6] == ' ' || header[6] == '\0')) {
-        type_str = "commit";
         type_val = OBJ_COMMIT;
     } else {
         free(file_data);
