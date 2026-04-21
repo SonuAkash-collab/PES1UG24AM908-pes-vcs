@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include <openssl/evp.h>
 
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
@@ -126,6 +127,25 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     compute_hash(full_obj, full_len, id_out);
 
     free(full_obj);
+
+    // Step 4: Check for deduplication (object already exists)
+    if (object_exists(id_out)) {
+        return 0; // Already stored, nothing to do
+    }
+
+    // Step 5: Create shard directory if needed
+    char shard_dir[256];
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(id_out, hex);
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+
+    if (mkdir(shard_dir, 0755) < 0) {
+        // EEXIST is fine (directory already exists)
+        if (errno != EEXIST) {
+            return -1;
+        }
+    }
+
     return 0;
 }
 
