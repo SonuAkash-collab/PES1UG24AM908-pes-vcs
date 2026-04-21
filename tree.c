@@ -151,6 +151,11 @@ static int index_load_local(Index *index) {
         index->count++;
     }
 
+    if (!feof(f)) {
+        fclose(f);
+        return -1; // Too many entries to fit in memory
+    }
+
     fclose(f);
     return 0;
 }
