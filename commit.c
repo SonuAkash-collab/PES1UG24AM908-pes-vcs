@@ -205,7 +205,14 @@ int head_update(const ObjectID *new_commit) {
     }
 
     char dir_path[520];
-    snprintf(dir_path, sizeof(dir_path), "%s", PES_DIR);
+    snprintf(dir_path, sizeof(dir_path), "%s", target_path);
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+    } else {
+        snprintf(dir_path, sizeof(dir_path), ".");
+    }
+
     fd = open(dir_path, O_RDONLY);
     if (fd >= 0) {
         if (fsync(fd) != 0) {
