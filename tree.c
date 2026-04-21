@@ -23,6 +23,8 @@
 #define MODE_EXEC      0100755
 #define MODE_DIR       0040000
 
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
 // ─── PROVIDED ───────────────────────────────────────────────────────────────
 
 // Determine the object mode for a filesystem path.
@@ -128,11 +130,12 @@ static int index_load_local(Index *index) {
     while (index->count < MAX_INDEX_ENTRIES) {
         IndexEntry *entry = &index->entries[index->count];
         char hash_hex[HASH_HEX_SIZE + 1];
+        unsigned long long mtime_tmp = 0;
 
         int parsed = fscanf(f, "%o %64s %llu %u %511s",
                             &entry->mode,
                             hash_hex,
-                            (unsigned long long *)&entry->mtime_sec,
+                            &mtime_tmp,
                             &entry->size,
                             entry->path);
         if (parsed == EOF) {
@@ -142,6 +145,8 @@ static int index_load_local(Index *index) {
             fclose(f);
             return -1;
         }
+
+        entry->mtime_sec = (uint64_t)mtime_tmp;
 
         index->count++;
     }
@@ -184,8 +189,7 @@ static int tree_from_index_entries(const Index *index, const char *prefix, Objec
             TreeEntry *entry = &tree.entries[tree.count++];
             entry->mode = src->mode;
             entry->hash = src->hash;
-            strncpy(entry->name, rel, sizeof(entry->name) - 1);
-            entry->name[sizeof(entry->name) - 1] = '\0';
+            snprintf(entry->name, sizeof(entry->name), "%s", rel);
             continue;
         }
 
@@ -220,8 +224,7 @@ static int tree_from_index_entries(const Index *index, const char *prefix, Objec
         TreeEntry *entry = &tree.entries[tree.count++];
         entry->mode = MODE_DIR;
         entry->hash = child_id;
-        strncpy(entry->name, dir_name, sizeof(entry->name) - 1);
-        entry->name[sizeof(entry->name) - 1] = '\0';
+        snprintf(entry->name, sizeof(entry->name), "%s", dir_name);
     }
 
     void *data = NULL;
