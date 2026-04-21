@@ -104,7 +104,11 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
         const TreeEntry *entry = &sorted_tree.entries[i];
         
         // Write mode and name (%o writes octal correctly for Git standards)
-        int written = sprintf((char *)buffer + offset, "%o %s", entry->mode, entry->name);
+        int written = snprintf((char *)buffer + offset, max_size - offset, "%o %s", entry->mode, entry->name);
+        if (written < 0 || (size_t)written >= max_size - offset) {
+            free(buffer);
+            return -1;
+        }
         offset += written + 1; // +1 to step over the null terminator written by sprintf
         
         // Write binary hash
