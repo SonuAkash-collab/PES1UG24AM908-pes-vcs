@@ -107,6 +107,12 @@ int commit_walk(commit_walk_fn callback, void *ctx) {
     ObjectID id;
     if (head_read(&id) != 0) return -1;
 
+    ObjectID zero_id;
+    memset(&zero_id, 0, sizeof(zero_id));
+    if (memcmp(&id, &zero_id, sizeof(ObjectID)) == 0) {
+        return -1;
+    }
+
     while (1) {
         ObjectType type;
         void *raw;
