@@ -269,6 +269,11 @@ int index_add(Index *index, const char *path) {
         return -1;
     }
 
+    struct stat st;
+    if (lstat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return -1;
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         return -1;
@@ -305,11 +310,6 @@ int index_add(Index *index, const char *path) {
         return -1;
     }
     free(data);
-
-    struct stat st;
-    if (stat(path, &st) != 0) {
-        return -1;
-    }
 
     if (!entry) {
         if (index->count >= MAX_INDEX_ENTRIES) {
