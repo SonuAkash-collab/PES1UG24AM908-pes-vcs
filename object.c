@@ -221,7 +221,105 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
-    return -1;
+    // Step 1: Build the file path from the hash
+    char path[512];
+    object_path(id, path, sizeof(path));
+
+    // Step 2: Open and read the entire file
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return -1; // File not found or can't open
+    }
+
+    // Determine file size
+    if (fseek(f, 0, SEEK_END) < 0) {
+        fclose(f);
+        return -1;
+    }
+    long file_size = ftell(f);
+    if (file_size < 0) {
+        fclose(f);
+        return -1;
+    }
+    rewind(f);
+
+    // Read entire file into buffer
+    void *file_data = malloc(file_size);
+    if (!file_data) {
+        fclose(f);
+        return -1;
+    }
+
+    if (fread(file_data, 1, file_size, f) != (size_t)file_size) {
+        free(file_data);
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    // Step 3: Parse header to extract type and size
+    // Header format: "<type> <size>\0<data>"
+    void *null_pos = memchr(file_data, '\0', file_size);
+    if (!null_pos) {
+        free(file_data);
+        return -1; // No null byte separator found
+    }
+
+    size_t header_len = (char *)null_pos - (char *)file_data;
+    char *header = (char *)file_data;
+
+    // Parse type string from header
+    const char *type_str = NULL;
+    ObjectType type_val;
+    if (strncmp(header, "blob", 4) == 0 && (header[4] == ' ' || header[4] == '\0')) {
+        type_str = "blob";
+        type_val = OBJ_BLOB;
+    } else if (strncmp(header, "tree", 4) == 0 && (header[4] == ' ' || header[4] == '\0')) {
+        type_str = "tree";
+        type_val = OBJ_TREE;
+    } else if (strncmp(header, "commit", 6) == 0 && (header[6] == ' ' || header[6] == '\0')) {
+        type_str = "commit";
+        type_val = OBJ_COMMIT;
+    } else {
+        free(file_data);
+        return -1; // Invalid type
+    }
+
+    // Parse size from header
+    size_t expected_size = 0;
+    if (sscanf(header, "%*s %zu", &expected_size) != 1) {
+        free(file_data);
+        return -1;
+    }
+
+    // Calculate actual data portion
+    size_t data_offset = header_len + 1; // Skip null byte
+    size_t actual_data_len = file_size - data_offset;
+
+    if (actual_data_len != expected_size) {
+        free(file_data);
+        return -1; // Size mismatch
+    }
+
+    // Step 4: Verify integrity by recomputing hash
+    ObjectID recomputed_hash;
+    compute_hash(file_data, file_size, &recomputed_hash);
+
+    if (memcmp(recomputed_hash.hash, id->hash, HASH_SIZE) != 0) {
+        free(file_data);
+        return -1; // Hash mismatch — corrupted object
+    }
+
+    // Step 5: Set output parameters
+    *type_out = type_val;
+    *data_out = malloc(actual_data_len);
+    if (!*data_out) {
+        free(file_data);
+        return -1;
+    }
+    memcpy(*data_out, (char *)file_data + data_offset, actual_data_len);
+    *len_out = actual_data_len;
+
+    free(file_data);
+    return 0;
 }
