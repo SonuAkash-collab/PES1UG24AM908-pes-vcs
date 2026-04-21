@@ -245,6 +245,12 @@ int index_save(const Index *index) {
         return -1;
     }
 
+    int dir_fd = open(PES_DIR, O_RDONLY);
+    if (dir_fd >= 0) {
+        fsync(dir_fd);
+        close(dir_fd);
+    }
+
     return 0;
 }
 
