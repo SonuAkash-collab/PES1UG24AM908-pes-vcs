@@ -193,8 +193,13 @@ int index_load(Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
-    Index sorted = *index;
-    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_index_entries);
+    Index *sorted = malloc(sizeof(Index));
+    if (!sorted) {
+        return -1;
+    }
+
+    *sorted = *index;
+    qsort(sorted->entries, sorted->count, sizeof(IndexEntry), compare_index_entries);
 
     char temp_path[512];
     int temp_len = snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE);
@@ -207,17 +212,18 @@ int index_save(const Index *index) {
         return -1;
     }
 
-    for (int i = 0; i < sorted.count; i++) {
+    for (int i = 0; i < sorted->count; i++) {
         char hash_hex[HASH_HEX_SIZE + 1];
-        hash_to_hex(&sorted.entries[i].hash, hash_hex);
+        hash_to_hex(&sorted->entries[i].hash, hash_hex);
         if (fprintf(f, "%06o %s %llu %u %s\n",
-                    sorted.entries[i].mode,
+                    sorted->entries[i].mode,
                     hash_hex,
-                    (unsigned long long)sorted.entries[i].mtime_sec,
-                    sorted.entries[i].size,
-                    sorted.entries[i].path) < 0) {
+                    (unsigned long long)sorted->entries[i].mtime_sec,
+                    sorted->entries[i].size,
+                    sorted->entries[i].path) < 0) {
             fclose(f);
             unlink(temp_path);
+            free(sorted);
             return -1;
         }
     }
@@ -225,6 +231,7 @@ int index_save(const Index *index) {
     if (fflush(f) != 0) {
         fclose(f);
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
@@ -232,16 +239,19 @@ int index_save(const Index *index) {
     if (fd < 0 || fsync(fd) != 0) {
         fclose(f);
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
     if (fclose(f) != 0) {
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
     if (rename(temp_path, INDEX_FILE) != 0) {
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
@@ -250,11 +260,13 @@ int index_save(const Index *index) {
         if (fsync(dir_fd) != 0) {
             close(dir_fd);
             unlink(temp_path);
+            free(sorted);
             return -1;
         }
         close(dir_fd);
     }
 
+    free(sorted);
     return 0;
 }
 
