@@ -40,8 +40,12 @@ static int object_id_is_zero(const ObjectID *id) {
 
 // Parse raw commit data into a Commit struct.
 int commit_parse(const void *data, size_t len, Commit *commit_out) {
-    (void)len;
-    const char *p = (const char *)data;
+    char *buffer = malloc(len + 1);
+    if (!buffer) return -1;
+    memcpy(buffer, data, len);
+    buffer[len] = '\0';
+
+    const char *p = buffer;
     char hex[HASH_HEX_SIZE + 1];
 
     // "tree <hex>\n"
@@ -75,6 +79,7 @@ int commit_parse(const void *data, size_t len, Commit *commit_out) {
     p = strchr(p, '\n') + 1;  // skip blank line
 
     snprintf(commit_out->message, sizeof(commit_out->message), "%s", p);
+    free(buffer);
     return 0;
 }
 
