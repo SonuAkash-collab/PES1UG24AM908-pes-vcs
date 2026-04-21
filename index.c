@@ -197,7 +197,10 @@ int index_save(const Index *index) {
     qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_index_entries);
 
     char temp_path[512];
-    snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE);
+    int temp_len = snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE);
+    if (temp_len < 0 || temp_len >= (int)sizeof(temp_path)) {
+        return -1;
+    }
 
     FILE *f = fopen(temp_path, "w");
     if (!f) {
@@ -315,7 +318,10 @@ int index_add(Index *index, const char *path) {
     entry->hash = blob_id;
     entry->mtime_sec = (uint64_t)st.st_mtime;
     entry->size = (uint32_t)st.st_size;
-    snprintf(entry->path, sizeof(entry->path), "%s", path);
+    int path_len = snprintf(entry->path, sizeof(entry->path), "%s", path);
+    if (path_len < 0 || path_len >= (int)sizeof(entry->path)) {
+        return -1;
+    }
 
     return index_save(index);
 }
